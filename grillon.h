@@ -85,7 +85,7 @@ public:
     }
     crisser(vol / 2);
   
-//    delay(normale(30000, 10000));
+    delay(normale(30000, 10000));
   }
     
 protected:

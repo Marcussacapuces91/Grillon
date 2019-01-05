@@ -19,7 +19,7 @@
  *  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
  *  OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
- * @file grillon.ino
+ * @file Grillon.ino
  * @brief Main program
  * @licence https://opensource.org/licenses/mit-license.php
  * @author Marc Sibert
