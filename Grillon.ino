@@ -30,10 +30,6 @@
 
 Grillon grillon;
 
-ISR (TIMER1_OVF_vect){  
-  Grillon::overflow();
-}
-
 void setup() {
 #ifdef DEBUG
   Serial.begin(250000);
