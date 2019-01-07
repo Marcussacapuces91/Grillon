@@ -34,6 +34,7 @@
 
 /**
  * Classe principale de l'application.
+ * @see https://www.disk91.com/2014/technology/hardware/arduino-atmega328p-low-power-consumption/
  */
 class Grillon {
 
@@ -152,6 +153,7 @@ protected:
 
 /**
  * Retourne un entier pseudo-aléatoire selon une distribution normale, centrée sur mean et avec un écart-type de dev.
+ * @see https://fr.wikipedia.org/wiki/Loi_normale
  * @param meam Valeur moyenne.
  * @param dev Ecart-type.
  * @return un entier pseudo-aléatoire sur 32 bits suivant une distribution normale.
