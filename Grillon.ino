@@ -25,20 +25,32 @@
  * @author Marc Sibert
  */
 
-#include "grillon.h"
-// #define DEBUG
+#define DEBUG 1
 
-Grillon grillon;
+#include "grillon.h"
+
+// Grillon<> grillon(64);
+Grillon<> grillon;
 
 void setup() {
-#ifdef DEBUG
-  Serial.begin(250000);
+#if defined(DEBUG) && defined(__AVR_ATmega328P__ )
+  Serial.begin(115200);
   while (!Serial) ;
+  Serial.println();
+  Serial.println(F("Starting Grillon!"));
 #endif
-    
+/*  
+  pinMode(1, OUTPUT);
+ */
   grillon.setup();
 }
 
 void loop() {
+/*  
+  digitalWrite(1, HIGH);
+  delay(100);
+  digitalWrite(1, LOW);
+  delay(1000);
+*/  
   grillon.loop();
 }

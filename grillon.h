@@ -32,75 +32,69 @@
 #include <avr/sleep.h>          // library for sleep
 #include <avr/power.h>          // library for power control
 
+enum cpu_t { AVR_ATtiny85, AVR_ATmega328P };
+
 /**
  * Classe principale de l'application.
  * @see https://www.disk91.com/2014/technology/hardware/arduino-atmega328p-low-power-consumption/
  */
+#if defined(__AVR_ATmega328P__)
+template<const cpu_t CPU = AVR_ATmega328P>
+#elif defined(__AVR_ATtiny85__)
+template<const cpu_t CPU = AVR_ATtiny85>
+#else
+  #error "neither __AVR_ATmega328P__, nor __AVR_ATtiny85__"
+#endif
 class Grillon {
 
 public:
+
+/**
+ * Constructeur avec paramètres.
+ */
+  Grillon(const unsigned volMax = 256) :
+    VOL_MAX(volMax)
+    {}
+
 /**
  * Méthode statique devant être appelée par l'interruption overflow.
+ * Lève le flag à la fréquence de 16 KHz
+ * f kHz * num / den ==> 16 kHz 
  */
-  inline static void overflow() {
-// 62.5 kHz * num / den ==> 16 kHz 
-    enum { num = 32, den = 125 };
-
-    t += num;
-    if (t > den) { 
-      t -= den;
+  inline
+  static void overflow() {
+    enum { NUM = 32, DEN = 125 }; // f = 62.5 KHz
+    static byte t = 0;
+  
+    t += NUM;
+    if (t > DEN) { 
+      t -= DEN;
       flag = true;
     }
-  };
-
-  inline static void watchdog() {
-    wdt_disable();     
-  }
+  }  
 
 /**
  * Initialise le contrôleur.
  * - Les I/Os en sortie ;
- * - Le timer1 en FAST PWM 8bits.
+ * - Le timer en FAST PWM 8bits.
  */
-  void setup() {
-// turn off brown-out enable in software
-    MCUCR = _BV(BODS) | _BV(BODSE);
-    MCUCR = _BV(BODS); 
-    
-    ADCSRA &= ~_BV(ADEN);             // Disable ADC
-    ACSR = _BV(ACD);                  // Disable the analog comparator
-    DIDR0 = 0x3F;                     // Disable digital input buffers on all ADC0-ADC5 pins
-    DIDR1 = _BV(AIN1D) | _BV(AIN0D);  // Disable digital input buffer on AIN1/0
-
-    power_twi_disable();
-    power_spi_disable();
-#ifndef DEBUG
-    power_usart0_disable(); // Needed for serial.print
-#endif
-//    power_timer0_disable(); // Needed for delay and millis()
-//    power_timer1_disable();
-    power_timer2_disable(); //Needed for asynchronous 32kHz operation
-        
-/*
-    DDRB = _BV(1) | // PB1 (D9) -> OC1A
-           _BV(2);  // PB2 (D10) -> OC1B
-*/           
-// Toutes sorties actives
-    DDRB = 0x3F;    // sauf 6 & 7 -> xtal
-    DDRC = 0xFF;
-    DDRD = 0xFF;
-#ifdef DEBUG
-    DDRB |= _BV(5); // PB5 (D13) -> led
-#endif
-  };
+  void setup();
 
 /**
  * Exécute une séquence d'émission du signal puis attend.
  */
+  inline
   void loop() {
-    const int vol = _BV((rnd() & 0x07) + 1); // Calcul du vol entre [2..256].
+    const int vol = (rnd() % (VOL_MAX - 16)) + 16; // Calcul du vol entre [16..256].
 
-    setTimer1On();
+#if defined(__AVR_ATmega328P__) && defined(DEBUG)
+    Serial.print(F("Vol: "));
+    Serial.println(vol);
+#endif
+
+    timerOn();
+
+    // 3 crissements progressifs
     crisser(vol / 8);
     delay(120);
     crisser(vol / 4);
@@ -108,40 +102,48 @@ public:
     crisser(vol / 2);
     delay(100);
 
-    while (rnd() > 0x8000000) {
-      const int v = normale(vol, vol/16);
+    // Puis une série de longueur aléatoire et de volume aléatoire aussi
+    while (rnd() < 0x0FE000000) { // si P < 0x0FE000000 / 0x0FFFFFFFF
+      const auto v = normale(vol, vol/16);
       crisser(v > 256 ? 256 : v); // pas de saturation.
       delay(normale(160, 20));
     }
     crisser(vol / 2);
-    setTimer1Off();
 
-    for (int i = normale(4, 2); i > 0; --i) {
-      startSleeping();
-      wakeup();
+    timerOff();
+
+    for (auto i = normale(16, 8); i > 0; --i) {
+      sleeping();
     }
+    wakeup();
   }
 
 protected:
 /**
- * Émet une séquence de cri (env. 3 amplitudes : --o--O--O--)
+ * Émet un cri à l'amplitude indiquée sur la sortie.
  * @param vol Volume sonore maxi [0..256]
  */
-  void crisser(const int vol = 256) {
-#ifdef DEBUG
+  void crisser(const unsigned vol = 256) {
+    const unsigned char* p = ___Documents_grillon_16khz_8bits_snd;
+    const unsigned char* const q = p + ___Documents_grillon_16khz_8bits_snd_size;
+  
+#if defined(__AVR_ATmega328P) && defined(DEBUG)
     PORTB |= _BV(5); // PB5 (D13) -> led
 #endif
-    const unsigned char *p = ___Documents_grillon_16khz_8bits_snd;
-    for (unsigned i = ___Documents_grillon_16khz_8bits_snd_size; i > 0; --i) {
-      OCR1A = OCR1B = (int(pgm_read_byte(p++)) - 0x80) * vol / 256 + 0x80; 
-      while (!flag) ; 
+    
+    while (p < q) {
+      output((int(pgm_read_byte(p++)) - 0x80) * vol / 256 + 0x80);
+      while (!flag) ;
       flag = false;
     }
-#ifdef DEBUG
-    PORTB &= ~_BV(5); // PB5 (D13) -> led
-#endif
-  }
 
+#if defined(__AVR_ATmega328P) && defined(DEBUG)
+    PORTB &= ~_BV(5); // PB5 (D13) -> led
+    PORTB &= ~_BV(0);
+#endif
+
+  }
+  
 /**
  * Retourne un entier pseudo-aléatoire sur 32 bits.
  * @see https://en.wikipedia.org/wiki/Linear_congruential_generator
@@ -165,96 +167,44 @@ protected:
   }
 
 /**
- * Règle et active le Timer1 en Fast PWM @ 62,5 kHz.
+ * Emet un échantillon en sortie.
+ * @param aValue valeur à appliquer sur la sortie.
  */
-  void setTimer1On() const {
-    cli();  // stop interrupts
-
-// Timer1 set registers
-    TCNT1 = 0;    // reset the value of Timer1 counter
-    TIMSK1 = _BV(TOIE1);  // Overflow Interrupt Enable
-    t = 0;
-  
-// Timer1 : Fast PWM 8 bits ; 16 MHz => f = fclk / [N . (1+top)] = 16 MHz / 256 = 62,5 KHz
-    TCCR1A = _BV(COM1A1) + /* _BV(COM1A0) + */            // Clear OC1A on compare, set at BOTTOM
-             _BV(COM1B1) + _BV(COM1B0) +                  // Set OC1B on compare, clear at BOTTOM
-             _BV(WGM10) /* _BV(WGM11) */ ;                // Fast PWM 8 bits
-    TCCR1B = _BV(WGM12) + /* _BV(WGM13) + */              // Fast PWM 8 bits
-             /* _BV(CS12) + _BV(CS11) + */ _BV(CS10);     // No Prescaling
-   
-    sei();  //enable interrupts
-/*
-    for (byte v = 0; v < 0x80; ++v) {
-      OCR1A = v;
-      OCR1B = 255 - v;
-      delayMicroseconds(10);
-    }
-*/
-  }
+  void output(const byte aValue);
 
 /**
- * Arrête le Timer1.
+ * Initialise & Demarre le (bon) timer.
  */
-  void setTimer1Off() const {
-/*
-    for (byte v = OCR1A; v > 0; --v) {
-      OCR1A = v;
-      OCR1B = 255 - v;
-      delayMicroseconds(10);
-    }
-*/    
-    cli();  // disable interrupts
+  void timerOn() const;
 
-// Timer1 set registers
-    TIMSK1 = 0;  // Disable all Timer1's interrupts
+/**
+ * Arrête le Timer.
+ */
+  void timerOff() const;
 
-// Timer1 : off
-    TCCR1A = 0;
-    TCCR1B = 0;
-
-    sei();  // enable interrupts
-  }
-
-  void startSleeping(void) const {
-   
-    cli();                           // disable interrupts for changing the registers
+/**
+ * Active le Watchdog & met la CPU en sommeil.
+ */
+  void sleeping(void) const;
   
-    MCUSR = 0;                       // reset status register flags
-  
-                                     // Put timer in interrupt-only mode:                                       
-    WDTCSR = _BV(WDCE) | _BV(WDE);   // Set WDCE (5th from left) and WDE (4th from left) to enter config mode,
-    WDTCSR = _BV(WDIE) | 0b100001;   // set WDIE: interrupt enabled
-                                     // clr WDE: reset disabled
-                                     // and set delay interval (right side of bar) to 8 seconds
-  
-    sei();                           // re-enable interrupts
-  
-    // reminder of the definitions for the time before firing
-    // delay interval patterns:
-    //  16 ms:     0b000000
-    //  500 ms:    0b000101
-    //  1 second:  0b000110
-    //  2 seconds: 0b000111
-    //  4 seconds: 0b100000
-    //  8 seconds: 0b100001
-  
-    wdt_reset();  // start watchdog timer
-    set_sleep_mode (SLEEP_MODE_PWR_DOWN); // prepare for powerdown  
-    sleep_enable(); 
-  
-#ifdef DEBUG
-    power_usart0_disable(); // Needed for serial.print
-#endif
-    power_timer0_disable(); // Needed for delay and millis()
-    power_timer1_disable();
-  
-    sleep_cpu ();   // power down !
-  }  
-
+/**
+ * Réveille le CPU après appel du Watchdog.
+ */
   void wakeup() const {
+    
+#if defined(__AVR_ATmega328P__)
+    wdt_disable();
     sleep_disable();
-#ifdef DEBUG
+
+  #ifdef DEBUG
     power_usart0_enable(); // Needed for serial.print
+    Serial.println(F("Wakeup!"));
+    Serial.flush();
+  #endif
+
+#elif defined(__AVR_ATtiny85__)
+    wdt_disable();
+    sleep_disable();
 #endif
     power_timer0_enable();
     power_timer1_enable();
@@ -262,26 +212,19 @@ protected:
   }
 
 private:
-/// Variable temps utilisée dans l'interruption d'overflow du timer1
-  static volatile unsigned t;
+  const unsigned VOL_MAX;
+
+/// Flag utilisé dans l'interruption d'overflow du timer1
   static volatile bool flag;
 
 /// Graine du générateur de nombres pseudo-aléatoires.
   static long unsigned seed;
 };
 
-volatile unsigned Grillon::t = 0;
-volatile bool Grillon::flag = false;
+/// Initialisation du flag à false au départ.
+template<const cpu_t CPU>
+volatile bool Grillon<CPU>::flag = false;
 
-long unsigned Grillon::seed = 12345;
-
-/**
- * Timer1 overflow call Grillon::overflow()
- */
-ISR(TIMER1_OVF_vect){  
-  Grillon::overflow();
-}
-
-ISR(WDT_vect){  
-  Grillon::watchdog();
-}
+/// Initialisation de graine du générateur de nombres pseudo-aléatoires à une valeur arbitraire.
+template<const cpu_t CPU>
+long unsigned Grillon<CPU>::seed = 12345;
