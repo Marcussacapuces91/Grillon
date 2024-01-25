@@ -1,9 +1,15 @@
 # Grillon
 
-C'est un développement pour Arduino (https://en.wikipedia.org/wiki/ATmega328) qui consiste a émettre le son d'un grillon.
-Le système est conçu pour avoir une faible consommation électrique et fonctionner avec des piles ou des batteries qui assurent une tension entre 4 et 5v env. Il fonctionne à une fréquence de 16MHz.
+Au départ, c'est un développement pour [Arduino](https://www.arduino.cc/) et son processeur [ATmega328](https://en.wikipedia.org/wiki/ATmega328) qui consiste a émettre le son d'un grillon à intervalle irrégulier.
 
-Il utilise principalement le Timer1 afin de contrôler les broches 9 & 10 (9 -> PB1 -> OC1A & 10 -> PB2 -> OC1B) en mode "push-pull" afin d'activer un haut-parleur piézo à haute impédance, évitant l'utilisation d'un amplificateur.
+Le système est conçu pour avoir une faible consommation électrique et fonctionner avec des piles ou des batteries pour être caché et rester longtemps sans intervention.
 
-L'objectif étant de déployer cette application sur Arduino Pro Mini, des aménagements particuliers seront peut être à prévoir pour cette carte (flasher sans bootloader, désactiver le quartz 16 MHz au profit de l'oscillateur interne à 8 MHz, etc.)
+Au départ prévu pour l'[ATmega328](https://en.wikipedia.org/wiki/ATmega328), il se décline aussi pour l'[ATtiny85](https://www.microchip.com/en-us/product/attiny85) et la carte de développement Digispark.
 
+## ATmega328
+
+Il utilise principalement le `Timer1` afin de contrôler les broches 9 & 10 (9 -> `PB1` -> `OC1A` & 10 -> `PB2` -> `OC1B`) en mode "push-pull" afin d'activer un haut-parleur piézo à haute impédance, évitant l'utilisation d'un amplificateur.
+
+## ATtiny85
+
+Cette fois, on utilise le `Timer0` et les broches `PB1` -> `OCR0A` et `PB2` -> `OCR0B` pour attaquer le haut-parleur piezo.
